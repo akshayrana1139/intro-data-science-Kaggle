@@ -1,7 +1,9 @@
 
 # coding: utf-8
 
-# In[229]:
+# # Crime Hotspot Detection : Classification Problem
+
+# In[29]:
 
 
 import warnings
@@ -33,6 +35,8 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import VotingClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+
 
 # Metrics
 from sklearn import preprocessing
@@ -46,22 +50,20 @@ from sklearn.metrics import confusion_matrix
 train = pd.read_csv("./crimeDataCsv.csv")
 
 
-# In[230]:
+# In[30]:
 
 
 train.head()
 
 
-# In[231]:
+# ## Removing Irrelevant columns
+# Also extracting partial information from columns like Block and Date
 
+# In[31]:
 
-# As there are some columns that are irrelevant for detecting the hotspot. So these columns can be removed.
 
 train=train.drop(["S. No.", "ID", "X Coordinate", "Y Coordinate", "Case Number", "Updated On", "Latitude",
                   "Longitude", "Location"], 1)
-
-
-# In[232]:
 
 
 # Getting the last part of a block and using that as a value. [Avenue, Roads, Streets - clubbing them into one entity]
@@ -79,18 +81,20 @@ for i in train["Date"]:
 train["Date"] = j
 
 
-# In[233]:
+# In[32]:
 
 
 train.head()
 
 
-# In[234]:
-
-
+# # Reverse GeoLocation 
 # Use this to extract festures from latitude, longitude using the google map api.
 # Since in this case, all the dataset lies in Chicago, so not useful for us. 
 # Future Use : We might extract information like middle of street, corner, crowded place etc.
+# 
+
+# In[33]:
+
 
 import json
 from urllib.request import urlopen
@@ -115,49 +119,58 @@ def getplace(location):
 #     print(s)
 
 
-# In[236]:
-
-
-# Encoding values for String by grouping them into buckets. 
+# # Encoding values
+# Encoding strings into integers by grouping them into buckets. 
 # Although Location and Location Description have 100 unique values so its 
-# better to study the impact and find a pattern and then group them into sub groups..
+# Better to study the impact and find a pattern and then group them into sub groups..
 
-list_to_encode = ["Primary Type", "Year", "Severity", "Arrest", "Domestic", "FBI Code", "Description", "Location Description", "Block", "IUCR", "Beat"]
+# In[34]:
+
+
+list_to_encode = ["Primary Type", "Year", "Severity", "Arrest", "Domestic", "FBI Code", 
+                  "Description", "Location Description", "Block", "IUCR", "Beat"]
 for values in list_to_encode:
     train[values] = preprocessing.LabelEncoder().fit(train[values]).transform(train[values])
 
 
-# In[237]:
+# # Mean Normalization 
+# (Helps to form a gaussian curve for dataset and speeds up training and improves accuracy..) <br>
+# Columns : Beat, IUCR, Description, Location Description, Community Area, Block
+# 
 
+# In[35]:
 
-# Mean Normalization : Beat, IUCR : May need for Description, Location Description, Community Area, Block
-# Helps to form a gaussian curve for dataset and speeds up training and improves accuracy..
 
 list_to_normalize = ["Block", "IUCR", "Description", "Location Description", "Beat", "Ward", "Community Area"]
 for i in list_to_normalize:
     train[i] = ((train[i]-train[i].mean())/(train[i].max()-train[i].min())).round(2)
 
 
-# In[238]:
+# In[36]:
 
 
 train.head()
 
 
-# In[239]:
+# ## Splitting the dataset in training and testing with the ratio 60:40
+# 
+
+# In[37]:
 
 
-# Splitting the dataset in training and testing with the ratio 60:40
-
-X_train, X_test, y_train, y_test = train_test_split(train[["Date", "Block", "IUCR", "Primary Type", "Description", "Severity", "Location Description", "Arrest", "Domestic", "Beat", "District", "Ward", "Community Area", "FBI Code", "Year"]],
+X_train, X_test, y_train, y_test = train_test_split(train[["Date", "Block", "IUCR", "Primary Type", "Description", "Severity", 
+                                                           "Location Description", "Arrest", "Domestic", "Beat", "District", 
+                                                           "Ward", "Community Area", "FBI Code", "Year"]],
                                                         train["Hotspot"], test_size=.4)
 
 
-# In[240]:
+# # Training
+# Trying out different classifiers and storing their accuracies on training and testing set repectively. <br>
+# Based on high performing classifiers, we can create an ensemble model of those to further improve the accuracy.
+# 
 
+# In[39]:
 
-# Trying out different classifiers and storing their accuracies on training and testing set repectively. 
-# Based on high performing classifiers, we can create an ensemble model of those to further imporve the accuracy.
 
 result = pd.DataFrame(columns = ("Classifiers","Training","Testing"))
 classifier, train_scores, test_scores = [],[],[]
@@ -246,4 +259,19 @@ test_scores.append(clf_ada.score(X_test, y_test))
 for i,text in enumerate(classifier):
     result.loc[i+1] = [text,np.around(train_scores[i]*100, decimals = 1),np.around(test_scores[i]*100, decimals=1)]
 result.sort_values("Testing", ascending = False)
+
+
+# # Visualizing
+# Since Trees outperformed all the other classifiers, visualizing the decision tree formed by the model.
+
+# In[40]:
+
+
+from sklearn.tree import export_graphviz
+import graphviz
+
+export_graphviz(clf_tree, out_file="mytree.dot")
+with open("./mytree.dot") as f:
+    dot_graph = f.read()
+graphviz.Source(dot_graph)
 
